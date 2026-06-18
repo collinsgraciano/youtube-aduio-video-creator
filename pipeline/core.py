@@ -1166,6 +1166,21 @@ def run_pipeline(runtime_config=None):
     resume_book_id = str(get_config("RESUME_BOOK_ID", "") or "").strip()
     resume_mode = bool(resume_book_id)
 
+    # 预查询待处理书籍总数（用于进度显示）
+    total_matching = 0
+    try:
+        table_sql = get_public_table_identifier("books")
+        count_sql = psycopg_sql.SQL("SELECT COUNT(*) FROM {}").format(table_sql)
+        count_params = []
+        target_category = str(get_config("TARGET_CATEGORY", "") or "").strip()
+        if target_category:
+            count_sql += psycopg_sql.SQL(" WHERE category = %s")
+            count_params.append(target_category)
+        total_matching = execute_postgres_fetchone(count_sql, tuple(count_params))
+        total_matching = int(total_matching[0]) if total_matching else 0
+    except Exception:
+        total_matching = 0
+
     has_interrupted = list_interrupted_book_states()
     if not resume_mode and has_interrupted:
         log.info("发现 %d 个未完成的分片状态，将尝试续跑。", len(has_interrupted))
@@ -1215,7 +1230,7 @@ def run_pipeline(runtime_config=None):
                 log.warning("剩余时间不足，停止处理新书。")
                 break
 
-            log.info("[%d/%s] 开始处理书籍: %s", processed_count + 1, "?" if max_books == 0 else str(max_books), book_name)
+            log.info("[%d/%d] 开始处理书籍: %s", processed_count + 1, max_books if max_books > 0 else total_matching, book_name)
             try:
                 result = process_book(book_record, output_root, youtube)
                 all_results.append(result)

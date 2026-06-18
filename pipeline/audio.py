@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pipeline.config import get_config
 from pipeline.log_utils import log, runtime_console_print
 from pipeline.utils import sanitize_filename
+from pipeline.constants import MIN_BOOK_DURATION_SECONDS, SUPPORTED_AUDIO_EXTENSIONS
 
 
 # ============================================================================
@@ -603,9 +604,6 @@ def get_explicit_total_book_duration_seconds(chapters_sorted):
 # ============================================================================
 # 分片计划构建
 # ============================================================================
-
-MIN_BOOK_DURATION_SECONDS = 30 * 60
-
 
 def build_split_part_plans(chapters_sorted):
     """构建音频分片计划"""

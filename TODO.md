@@ -7,10 +7,10 @@
 ## 1. 代码结构优化
 
 - [x] **`run_pipeline` 集成 Podcast 后置同步** — 当前 `core.py` 中的 `run_pipeline()` 在处理完书籍后未调用 `_podcast_sync_split_playlist_podcast()`，导致分片书籍上传后不会自动同步到 Podcast 播放列表
-- [ ] **消除 `runtime_core.py` 的重复依赖** — 原始文件仍保留在仓库中（415KB），模块拆分完成后可考虑归档或删除，避免双源不一致
+- [x] **消除 `runtime_core.py` 的重复依赖** — 原始文件已移入 `archive/runtime_core.py`，仓库源码不再引用
 - [x] **`podcast.py` 的函数命名规范化** — 当前 `_podcast_*` 以下划线开头表示私有函数，部分函数在 `core.py` 的主流程中需要被调用，应考虑统一公开接口
 - [x] **模块间循环引用检查** — 当前 `core.py` 导入了多个子模块，`__init__.py` 中又有互相引用，需要确保在 Colab 环境下不会出现循环导入
-- [ ] **常量和配置项集中管理** — 部分模块中存在硬编码的字符串常量（如错误消息、日志格式），应集中到 `config.py` 或单独的 `constants.py`
+- [x] **常量和配置项集中管理** — 已创建 `pipeline/constants.py`，集中管理所有跨模块共享常量
 
 ## 2. 性能优化
 

@@ -18,6 +18,7 @@ from pipeline.log_utils import log
 from pipeline.db import execute_postgres_fetchone, execute_postgres_fetchall, execute_postgres, get_public_table_identifier, get_postgres_dsn
 from pipeline.utils import normalize_text_items, write_json_file, read_json_file, make_json_compatible, format_seconds_hhmmss
 from pipeline.audio import estimate_chapter_duration_seconds
+from pipeline.constants import DEFAULT_BOOK_STATE_TABLE
 from psycopg import sql as psycopg_sql
 
 
@@ -36,7 +37,7 @@ def build_split_state_ref(book_id, project_flag=None):
 
 def get_book_state_table_name():
     """获取书籍状态表名"""
-    return str(get_config("BOOK_STATE_TABLE", "") or "book_processing_states").strip() or "book_processing_states"
+    return str(get_config("BOOK_STATE_TABLE", "") or DEFAULT_BOOK_STATE_TABLE).strip() or DEFAULT_BOOK_STATE_TABLE
 
 
 # ============================================================================

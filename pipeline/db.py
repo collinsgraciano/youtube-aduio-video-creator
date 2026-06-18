@@ -6,8 +6,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from pipeline.config import get_config
-
-POSTGRES_SCHEMA = "public"
+from pipeline.constants import POSTGRES_SCHEMA
 
 
 def get_postgres_dsn(optional=False):

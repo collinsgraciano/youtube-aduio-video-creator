@@ -52,8 +52,8 @@ from pipeline.audio import (
     get_explicit_total_book_duration_seconds, estimate_chapter_duration_seconds,
     denoise_audio_paths_parallel, generate_video, merge_audio_ffmpeg,
     mix_with_bgm, generate_youtube_timestamps,
-    MIN_BOOK_DURATION_SECONDS,
 )
+from pipeline.constants import MIN_BOOK_DURATION_SECONDS
 from pipeline.music_library import sync_music_library_if_enabled
 from pipeline.podcast import sync_split_playlist_podcast
 from psycopg import sql as psycopg_sql

@@ -17,10 +17,8 @@ from pipeline.config import get_config
 from pipeline.log_utils import log, runtime_console_print
 from pipeline.utils import parse_text_list_config, safe_music_output_path, normalize_runtime_source
 from pipeline.db import execute_postgres_fetchone, get_public_table_identifier, get_postgres_dsn
+from pipeline.constants import SUPPORTED_AUDIO_EXTENSIONS
 from psycopg import sql
-
-
-SUPPORTED_AUDIO_EXTENSIONS = (".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma")
 
 
 def load_cloud_music_runtime_setting(setting_key):

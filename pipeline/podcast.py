@@ -1684,11 +1684,6 @@ def _podcast_sync_split_playlist_podcast(result, state, book_record, book_name):
     }
 
 
-_PODCAST_RUNTIME_ORIGINAL_PROCESS_STANDARD_BOOK = process_standard_book
-_PODCAST_RUNTIME_ORIGINAL_SYNC_SPLIT_PLAYLIST = sync_split_playlist
-_PODCAST_RUNTIME_ORIGINAL_SYNC_RESULT_FROM_SPLIT_STATE = sync_result_from_split_state
-
-
 # ============================================================================
 # 公开接口
 # ============================================================================

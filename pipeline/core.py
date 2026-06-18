@@ -857,74 +857,111 @@ def process_standard_book(book_record, book_data, chapters_data, book_dir, safe_
             result.error = "chapters_data 为空或无效，且不存在可复用的成品音频"
             return finalize_book_result(result, book_dir, book_record)
 
-        ok_download = download_chapter_items(
-            chapters_data,
-            book_dir,
-            safe_name,
-            audio_type=audio_type,
-            book_name=book_name,
-            allow_skip_existing=skip_existing,
-        )
-        if not ok_download:
-            result.error = "所有章节下载失败"
-            return finalize_book_result(result, book_dir, book_record)
+        # 转换章节数据格式供 download_chapter_items 使用
+        chapter_items = [
+            {
+                "source_index": i + 1,
+                "chapter": {"mp3Url": ch.get("mp3Url", "")},
+                "title": ch.get("title", f"chapter_{i+1:04d}"),
+            }
+            for i, ch in enumerate(chapters_data) if isinstance(ch, dict)
+        ]
 
-        result.success_count = ok_download
+        # 1. 下载章节音频
+        chapter_paths = download_chapter_items(chapter_items, book_dir)
+        result.success_count = len(chapter_paths)
 
+        # 2. 降噪
         try:
-            denoised = denoise_audio_paths_parallel(
-                book_dir, safe_name, file_format=audio_type, book_name=book_name,
-                use_poetry_audio=use_poetry_audio,
-            )
+            denoised_paths = denoise_audio_paths_parallel(chapter_paths)
         except Exception as e:
             log.warning("[%s] DeepFilter 降噪失败: %s", book_name, e)
-            denoised = []
+            denoised_paths = []
 
-        try:
-            merged = merge_audio_ffmpeg(
-                book_dir, safe_name, file_format=audio_type, book_name=book_name,
-                use_poetry_audio=use_poetry_audio,
-            )
-        except Exception as e:
-            merged = None
+        # 3. 合并音频
+        merged_path = os.path.join(book_dir, f"{safe_name}.{audio_type}")
+        merge_ok = merge_audio_ffmpeg(denoised_paths or chapter_paths, merged_path)
+        if merge_ok:
+            result.merged_audio_path = merged_path
+            log.info("[%s] 音频合并完成: %s", book_name, os.path.basename(merged_path))
+        else:
+            log.warning("[%s] 音频合并失败", book_name)
+            result.error = "音频合并失败"
+            return finalize_book_result(result, book_dir, book_record)
 
-        if merged:
-            result.merged_audio_path = merged
-            if enable_bgm_mix:
-                sync_music_library_if_enabled()
-                mixed = mix_with_bgm(merged, book_dir, safe_name, book_name=book_name, audio_type=audio_type)
-                if mixed:
-                    result.mixed_audio_path = mixed
-            if enable_video_generation and result.cover_image_path:
-                video_path = generate_video(result, book_dir, safe_name, book_name=book_name, video_resolution=video_resolution)
-                if video_path and os.path.isfile(video_path):
+        # 4. BGM 混音
+        if enable_bgm_mix:
+            sync_music_library_if_enabled()
+            music_dir = get_config("MUSIC_DIR", "")
+            if music_dir and os.path.exists(music_dir):
+                mixed_path = os.path.join(book_dir, f"{safe_name}_mixed.mp3")
+                mix_ok = mix_with_bgm(merged_path, mixed_path, music_dir)
+                if mix_ok:
+                    result.mixed_audio_path = mixed_path
+                    log.info("[%s] BGM 混音完成: %s", book_name, os.path.basename(mixed_path))
+
+        # 5. 生成视频（用混音或合并后的音频）
+        if enable_video_generation and result.cover_image_path:
+            audio_for_video = result.mixed_audio_path or result.merged_audio_path
+            if audio_for_video and os.path.isfile(audio_for_video):
+                video_path = os.path.join(book_dir, f"{safe_name}.mp4")
+                video_ok = generate_video(audio_for_video, result.cover_image_path, video_path, resolution=video_resolution)
+                if video_ok:
                     result.video_path = video_path
                     result.video_ready = True
-                    log.info("[%s] 复用已封装的 MP4 成品。", book_name)
+                    log.info("[%s] MP4 封装完成: %s", book_name, os.path.basename(video_path))
                 else:
-                    result.video_path = video_path or ""
+                    log.warning("[%s] MP4 封装失败", book_name)
 
+    # 如果视频还没生成（比如复用旧音频时），再试一次
     if enable_video_generation and result.cover_image_path and not result.video_path:
-        try:
-            video_path = generate_video(result, book_dir, safe_name, book_name=book_name, video_resolution=video_resolution)
-            result.video_path = video_path or ""
-            if video_path and os.path.isfile(video_path):
-                log.info("[%s] 已封装为 MP4 成品。", book_name)
-            else:
-                log.warning("[%s] MP4 封装失败，本次仅保留音频成品。", book_name)
-        except Exception as e:
-            log.error("[%s] MP4 封装发生异常: %s", book_name, e)
+        audio_for_video = result.mixed_audio_path or result.merged_audio_path
+        if audio_for_video and os.path.isfile(audio_for_video):
+            try:
+                video_path = os.path.join(book_dir, f"{safe_name}.mp4")
+                video_ok = generate_video(audio_for_video, result.cover_image_path, video_path, resolution=video_resolution)
+                if video_ok:
+                    result.video_path = video_path
+                    result.video_ready = True
+                    log.info("[%s] MP4 封装完成: %s", book_name, os.path.basename(video_path))
+                else:
+                    log.warning("[%s] MP4 封装失败，仅保留音频成品。", book_name)
+            except Exception as e:
+                log.error("[%s] MP4 封装发生异常: %s", book_name, e)
     elif enable_video_generation and not result.cover_image_path:
         log.warning("[%s] 缺少音频或封面，跳过 MP4 封装。", book_name)
 
     if enable_video_generation and not enable_youtube_upload:
         result.upload_ready = True
 
+    # 6. YouTube 上传
     if enable_youtube_upload and result.video_path:
         try:
-            upload_ok = upload_youtube_video(result, youtube, book_name=book_name, book_dir=book_dir)
-            if upload_ok:
+            # 检查是否已有上传回执
+            receipt = load_youtube_upload_receipt("", video_path=result.video_path, channel_name=get_config("YOUTUBE_CHANNEL_NAME", ""))
+            if receipt:
+                result.youtube_url = receipt.get("youtube_url", "")
                 log.info("[%s] 复用已上传回执: %s", book_name, result.youtube_url)
+            else:
+                # 构建上传参数
+                seo_title = str(getattr(result, "seo_title", "") or book_name)[:100]
+                seo_desc = str(getattr(result, "seo_description", "") or "")
+                seo_tags = str(getattr(result, "seo_tags", "") or "")
+                privacy = get_config("YOUTUBE_PRIVACY_STATUS", "public")
+
+                upload_result = upload_youtube_video(
+                    youtube, result.video_path, seo_title, seo_desc, seo_tags,
+                    category_id=get_config("YOUTUBE_CATEGORY_ID", ""),
+                    privacy_status=privacy,
+                    channel_name=get_config("YOUTUBE_CHANNEL_NAME", ""),
+                    default_language=get_config("YOUTUBE_DEFAULT_LANGUAGE", "zh-CN"),
+                )
+                if upload_result:
+                    result.youtube_url = upload_result.get("youtube_url", "")
+                    # 保存回执
+                    receipt_path = os.path.join(book_dir, f"{safe_name}_upload_receipt.json")
+                    persist_youtube_upload_receipt(receipt_path, upload_result)
+                    log.info("[%s] YouTube 上传完成: %s", book_name, result.youtube_url)
         except Exception as e:
             log.error("[%s] YouTube 上传失败: %s", book_name, e)
             result.error = f"YouTube 上传失败: {e}"
@@ -1005,53 +1042,80 @@ def process_split_book(book_record, book_data, chapters_data, book_dir, safe_nam
         part_safe_name = f"{safe_name}_part_{part_index:03d}" if result.part_count > 1 else safe_name
         dest_dir = os.path.join(book_dir, f"part_{part_index:03d}")
 
-        ok_download = download_chapter_items(
-            part_chapters_data,
-            dest_dir,
-            part_safe_name,
-            audio_type=audio_type,
-            book_name=f"{book_name}[Part {part_index}/{result.part_count}]",
-            allow_skip_existing=skip_existing,
-        )
-        if not ok_download:
-            raise RuntimeError(f"分片 {part_index} 没有有效的章节")
+        # 转换章节数据格式供 download_chapter_items 使用
+        part_chapter_items = [
+            {
+                "source_index": i + 1,
+                "chapter": {"mp3Url": ch.get("mp3Url", "")},
+                "title": ch.get("title", f"chapter_{i+1:04d}"),
+            }
+            for i, ch in enumerate(part_chapters_data) if isinstance(ch, dict)
+        ]
 
+        # 1. 下载分片章节音频
+        part_chapter_paths = download_chapter_items(part_chapter_items, dest_dir)
+
+        # 2. 降噪
         try:
-            denoised = denoise_audio_paths_parallel(
-                dest_dir, part_safe_name, file_format=audio_type,
-                book_name=f"{book_name}[Part {part_index}/{result.part_count}]",
-                use_poetry_audio=use_poetry_audio,
-            )
+            denoised_paths = denoise_audio_paths_parallel(part_chapter_paths)
         except Exception as e:
             raise RuntimeError(f"分片 {part_index} 降噪失败: {e}")
 
-        merged = merge_audio_ffmpeg(
-            dest_dir, part_safe_name, file_format=audio_type,
-            book_name=f"{book_name}[Part {part_index}/{result.part_count}]",
-            use_poetry_audio=use_poetry_audio,
-        )
+        # 3. 合并分片音频
+        part_merged_path = os.path.join(dest_dir, f"{part_safe_name}.{audio_type}")
+        merge_ok = merge_audio_ffmpeg(denoised_paths or part_chapter_paths, part_merged_path)
+        if not merge_ok:
+            raise RuntimeError(f"分片 {part_index} 音频合并失败")
 
-        if enable_bgm_mix and merged:
+        # 4. BGM 混音
+        if enable_bgm_mix:
             sync_music_library_if_enabled()
-            mixed = mix_with_bgm(merged, dest_dir, part_safe_name, book_name=f"{book_name}[Part {part_index}/{result.part_count}]", audio_type=audio_type)
+            music_dir = get_config("MUSIC_DIR", "")
+            if music_dir and os.path.exists(music_dir):
+                part_mixed_path = os.path.join(dest_dir, f"{part_safe_name}_mixed.mp3")
+                mix_with_bgm(part_merged_path, part_mixed_path, music_dir)
 
+        # 5. 生成分片视频
         if enable_video_generation and result.cover_image_path:
-            video_path = generate_video(result, dest_dir, part_safe_name, book_name=f"{book_name}[Part {part_index}/{result.part_count}]", video_resolution=video_resolution)
-            if video_path and os.path.isfile(video_path):
-                log.info("[%s] 分片 %d/%d 复用已有 MP4。", book_name, part_index, result.part_count)
-            elif not video_path:
-                log.warning("[%s] 分片 %d/%d MP4 生成失败。", book_name, part_index, result.part_count)
+            audio_for_part_video = os.path.join(dest_dir, f"{part_safe_name}_mixed.mp3") if enable_bgm_mix else part_merged_path
+            if os.path.isfile(audio_for_part_video):
+                part_video_path = os.path.join(dest_dir, f"{part_safe_name}.mp4")
+                video_ok = generate_video(audio_for_part_video, result.cover_image_path, part_video_path, resolution=video_resolution)
+                if video_ok:
+                    result.video_path = part_video_path
+                    log.info("[%s] 分片 %d/%d MP4 生成完成。", book_name, part_index, result.part_count)
+                else:
+                    log.warning("[%s] 分片 %d/%d MP4 生成失败。", book_name, part_index, result.part_count)
 
-        if enable_youtube_upload and result.video_path:
+        # 6. 上传分片到 YouTube
+        video_to_upload = part_video_path if enable_video_generation and result.cover_image_path else part_merged_path
+        if enable_youtube_upload and os.path.isfile(video_to_upload):
             try:
-                part_hint = f"第 {part_index}/{result.part_count} 部分" if result.part_count > 1 else ""
-                _, yt_url, publish_at, schedule_reason = upload_youtube_video(
-                    result, youtube, book_name=book_name, book_dir=book_dir,
-                    part_hint=part_hint, part_index=part_index, part_count=result.part_count,
-                    dest_dir=dest_dir,
-                )
-                if yt_url:
-                    log.info("[%s] 分片 %d/%d 复用回执: %s", book_name, part_index, result.part_count, yt_url)
+                # 检查是否已有上传回执
+                part_receipt = load_youtube_upload_receipt("", video_path=video_to_upload, channel_name=get_config("YOUTUBE_CHANNEL_NAME", ""))
+                if part_receipt:
+                    result.youtube_url = part_receipt.get("youtube_url", "")
+                    log.info("[%s] 分片 %d/%d 复用回执: %s", book_name, part_index, result.part_count, result.youtube_url)
+                else:
+                    seo_title = str(getattr(result, "seo_title", "") or book_name)[:100]
+                    seo_desc = str(getattr(result, "seo_description", "") or "")
+                    seo_tags = str(getattr(result, "seo_tags", "") or "")
+                    privacy = get_config("YOUTUBE_PRIVACY_STATUS", "public")
+                    part_hint = f"第 {part_index}/{result.part_count} 部分" if result.part_count > 1 else ""
+                    full_title = f"{seo_title} {part_hint}".strip()[:100] if part_hint else seo_title
+
+                    upload_result = upload_youtube_video(
+                        youtube, video_to_upload, full_title, seo_desc, seo_tags,
+                        category_id=get_config("YOUTUBE_CATEGORY_ID", ""),
+                        privacy_status=privacy,
+                        channel_name=get_config("YOUTUBE_CHANNEL_NAME", ""),
+                        default_language=get_config("YOUTUBE_DEFAULT_LANGUAGE", "zh-CN"),
+                    )
+                    if upload_result:
+                        result.youtube_url = upload_result.get("youtube_url", "")
+                        part_receipt_path = os.path.join(dest_dir, f"{part_safe_name}_upload_receipt.json")
+                        persist_youtube_upload_receipt(part_receipt_path, upload_result)
+                        log.info("[%s] 分片 %d/%d 上传完成: %s", book_name, part_index, result.part_count, result.youtube_url)
             except Exception as e:
                 raise RuntimeError(f"分片 {part_index} YouTube 上传失败: {e}")
 

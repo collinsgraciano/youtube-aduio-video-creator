@@ -1165,9 +1165,8 @@ def run_pipeline(runtime_config=None):
     youtube = None
     enable_youtube_upload = get_config("ENABLE_YOUTUBE_UPLOAD", True)
     if enable_youtube_upload:
-        channel_name = get_config("YOUTUBE_CHANNEL_NAME", "")
         try:
-            youtube = authenticate_youtube_from_supabase(channel_name)
+            youtube = authenticate_youtube_from_supabase(get_config("YOUTUBE_CHANNEL_NAME", ""))
         except MissingYouTubeCredentialsError as e:
             log.warning("YouTube 凭证未配置: %s。跳过所有 YouTube 相关操作。", e)
             enable_youtube_upload = False

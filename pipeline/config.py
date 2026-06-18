@@ -106,6 +106,10 @@ globals().update(DEFAULT_RUNTIME_CONFIG)
 def apply_runtime_config(runtime_config: dict | None = None):
     """合并运行时配置并注入所有 pipeline 模块的命名空间"""
     merged = dict(DEFAULT_RUNTIME_CONFIG)
+    # 基于当前已生效的配置增量合并，防止第二次调用时重置已设置的值
+    for key in list(globals().keys()):
+        if key in DEFAULT_RUNTIME_CONFIG:
+            merged[key] = globals()[key]
     if runtime_config:
         merged.update(runtime_config)
 

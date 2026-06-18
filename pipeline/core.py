@@ -1102,7 +1102,7 @@ def process_book(book_record, output_root, youtube):
         chapters_data = []
     book_data_raw_chapter_count = len(chapters_data)
 
-    chapters_data = normalize_text_items(chapters_data)
+    chapters_data = [ch for ch in chapters_data if isinstance(ch, dict)]
 
     # 调试：打印前2章的完整原始数据和时长解析结果
     for ci, ch in enumerate(chapters_data[:2]):

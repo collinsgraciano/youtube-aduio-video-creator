@@ -26,6 +26,13 @@ from pipeline.utils import (
 from PIL import Image, ImageDraw, ImageFont
 import requests
 
+# === 常量定义 ===
+_PODCAST_PLAYLIST_IMAGES_ENDPOINT = "https://www.googleapis.com/youtube/v3/playlistImages"
+_PODCAST_SHOW_IMAGE_FILENAME = "podcast_longform_show_cover.jpg"
+_PODCAST_PLAYLIST_ASSET_DIR = "_podcast_playlist_assets"
+_PODCAST_SHOW_ASSET_DIR = "_podcast_show_assets"
+
+
 def _podcast_runtime_enabled():
     return bool(globals().get("ENABLE_YOUTUBE_PODCAST_RUNTIME", False))
 

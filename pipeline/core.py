@@ -49,7 +49,8 @@ from pipeline.state import (
 )
 from pipeline.audio import (
     download_chapter_items, build_split_part_plans, build_final_audio_from_chapter_paths,
-    get_explicit_total_book_duration_seconds, estimate_chapter_duration_seconds,
+    get_explicit_total_book_duration_seconds, get_explicit_chapter_duration_seconds,
+    estimate_chapter_duration_seconds, parse_duration_to_seconds,
     denoise_audio_paths_parallel, generate_video, merge_audio_ffmpeg,
     mix_with_bgm, generate_youtube_timestamps,
 )
@@ -1102,7 +1103,26 @@ def process_book(book_record, output_root, youtube):
     book_data_raw_chapter_count = len(chapters_data)
 
     chapters_data = normalize_text_items(chapters_data)
+
+    # 调试：打印前2章的完整原始数据和时长解析结果
+    for ci, ch in enumerate(chapters_data[:2]):
+        ch_id = ch.get("id", ci)
+        raw_long = ch.get("long", ch.get("duration", ch.get("duration_seconds", "N/A")))
+        parsed = parse_duration_to_seconds(ch.get("long"))
+        explicit = get_explicit_chapter_duration_seconds(ch)
+        estimated = estimate_chapter_duration_seconds(ch)
+        log.info("[%s-第%d章] long=%s parsed=%ds explicit=%s estimated=%ds",
+                 book_name, ch_id, raw_long, parsed, explicit, estimated)
+        log.info("[%s-第%d章] 原始数据: %s", book_name, ch_id, json.dumps(ch, ensure_ascii=False))
+
     total_seconds = get_explicit_total_book_duration_seconds(chapters_data)
+
+    # 调试：打印总时长估算明细
+    if total_seconds is not None:
+        log.info("[%s] 显式总时长: %d秒 (%.2f小时)", book_name, total_seconds, total_seconds / 3600.0)
+    else:
+        chapter_estimates = [estimate_chapter_duration_seconds(ch) for ch in chapters_data[:5]]
+        log.info("[%s] 无显式总时长，前5章估算: %s", book_name, chapter_estimates)
 
     # 如果有显式总时长就用它，否则用估算总时长
     if total_seconds is not None:

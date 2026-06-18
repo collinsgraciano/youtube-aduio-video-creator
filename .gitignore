@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Colab
+sample_data/
+/content/
+
+# 运行时生成的目录
+_output/
+_run_reports/
+music_downloads/
+
+# 敏感配置（如果有本地环境变量或密钥）
+.env
+*.key
+*.pem
+
+# 大型临时文件
+*.wav
+*.mp3
+*.mp4
+*.m4a
+*.wma

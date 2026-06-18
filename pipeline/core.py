@@ -1096,7 +1096,15 @@ def process_book(book_record, output_root, youtube):
     book_data_raw_chapter_count = len(chapters_data)
 
     chapters_data = normalize_text_items(chapters_data)
-    raw_hours = get_explicit_total_book_duration_seconds(chapters_data) / 3600.0
+    total_seconds = get_explicit_total_book_duration_seconds(chapters_data)
+    if total_seconds is None:
+        log.warning("书籍 %s 的章节时长数据不完整，无法计算总时长，跳过处理。", book_name)
+        return BookResult(
+            book_id=book_id, book_name=book_name, category=category,
+            chapter_count=len(chapters_data), estimated_total_duration_seconds=0,
+            skipped=True, error="章节时长数据不完整",
+        )
+    raw_hours = total_seconds / 3600.0
     split_trigger_hours = float(get_config("LONG_AUDIO_SPLIT_TRIGGER_HOURS", 12.0))
 
     safe_name = sanitize_filename(book_name)[:120]

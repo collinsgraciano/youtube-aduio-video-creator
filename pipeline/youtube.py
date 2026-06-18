@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import ast
 import json
 import time
 from urllib.parse import urlparse, parse_qs
@@ -68,8 +69,13 @@ def authenticate_youtube_from_supabase(channel_name):
 
     try:
         token_data = json.loads(token_json_str)
-    except json.JSONDecodeError as e:
-        raise MissingYouTubeCredentialsError(f"token_json 格式错误: {e}") from e
+    except json.JSONDecodeError:
+        try:
+            token_data = ast.literal_eval(token_json_str)
+        except Exception:
+            raise MissingYouTubeCredentialsError(
+                f"token_json 格式错误，既不是合法 JSON 也不是 Python 字面量: {token_json_str[:80]}"
+            )
 
     credentials = Credentials.from_authorized_user_info(token_data)
 

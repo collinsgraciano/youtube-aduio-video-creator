@@ -1176,8 +1176,8 @@ def run_pipeline(runtime_config=None):
         try:
             youtube = authenticate_youtube_from_supabase(get_config("YOUTUBE_CHANNEL_NAME", ""))
         except MissingYouTubeCredentialsError as e:
-            log.warning("YouTube 凭证未配置: %s。跳过所有 YouTube 相关操作。", e)
-            enable_youtube_upload = False
+            log.error("YouTube 认证失败，流水线无法继续: %s", e)
+            raise
 
     # 在主循环前预先下载音乐库（如果启用 BGM）
     if get_config("ENABLE_BGM_MIX", True):

@@ -47,11 +47,11 @@
 
 ## 6. 文档完善
 
-- [ ] **模块 README** — 为 `pipeline/` 包编写使用说明，含每个模块的功能描述
-- [ ] **配置项索引** — 列出 `DEFAULT_RUNTIME_CONFIG` 中所有 ~90 个配置项的说明和默认值
+- [x] **模块 README** — 已创建 `pipeline/README.md`，含每个模块的功能描述和依赖层级
+- [x] **配置项索引** — 已创建 `docs/config_index.md`，列出全部 ~90 个配置项的说明和默认值
 - [ ] **YouTube API 授权说明** — 记录如何获取和配置 YouTube OAuth 凭据
 - [ ] **ModelScope 申请指南** — 记录如何申请 ModelScope Token 和配置 AI 封面/SEO
-- [ ] **数据库表结构文档** — 记录 `books`、`book_processing_states`、`modelscope_tokens` 等表的字段说明
+- [x] **数据库表结构文档** — 已创建 `docs/database_tables.md`，记录全部 7 张表的字段说明
 
 ## 7. 依赖管理
 

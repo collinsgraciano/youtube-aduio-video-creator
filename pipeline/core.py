@@ -354,11 +354,17 @@ def _update_book_status_in_database(book_id, status_value):
 
 
 def _update_book_tags_in_database(book_id, tags_value):
-    """更新数据库中书籍的标签"""
+    """更新数据库中书籍的标签（tags 列为 text[] 类型）"""
+    # 将逗号分隔的字符串转为 PostgreSQL text[] 数组字面量 {"a","b"}
+    if isinstance(tags_value, str):
+        tags_list = [t.strip() for t in tags_value.split(",") if t.strip()]
+        pg_array = "{" + ",".join(tags_list) + "}"
+    else:
+        pg_array = tags_value
     table_sql = get_public_table_identifier("books")
     execute_postgres(
         psycopg_sql.SQL("UPDATE {} SET tags = %s WHERE book_id = %s").format(table_sql),
-        (tags_value, str(book_id)),
+        (pg_array, str(book_id)),
     )
 
 
@@ -1104,7 +1110,7 @@ def process_book(book_record, output_root, youtube):
     else:
         estimated = sum(estimate_chapter_duration_seconds(ch) for ch in chapters_data)
         raw_hours = estimated / 3600.0
-        log.info("书籍 %s 的章节时长数据不完整，使用估算时长: %.1f 小时",
+        log.info("书籍 %s 的章节时长无显式数据，使用估算时长: %.2f 小时",
                   book_name, raw_hours)
 
     split_trigger_hours = float(get_config("LONG_AUDIO_SPLIT_TRIGGER_HOURS", 12.0))
@@ -1121,7 +1127,8 @@ def process_book(book_record, output_root, youtube):
         estimated_total_duration_seconds=int(raw_hours * 3600),
     )
 
-    if result.estimated_total_duration_seconds < MIN_BOOK_DURATION_SECONDS:
+    # 只有明确知道时长太短时才跳过（遵循 runtime_core.py 逻辑）
+    if total_seconds is not None and 0 < total_seconds < MIN_BOOK_DURATION_SECONDS:
         skip_and_delete_short_book(book_record, result, book_name)
         return finalize_book_result(result, book_dir, book_record)
 

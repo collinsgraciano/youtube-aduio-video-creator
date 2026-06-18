@@ -1097,14 +1097,16 @@ def process_book(book_record, output_root, youtube):
 
     chapters_data = normalize_text_items(chapters_data)
     total_seconds = get_explicit_total_book_duration_seconds(chapters_data)
-    if total_seconds is None:
-        log.warning("书籍 %s 的章节时长数据不完整，无法计算总时长，跳过处理。", book_name)
-        return BookResult(
-            book_id=book_id, book_name=book_name, category=category,
-            chapter_count=len(chapters_data), estimated_total_duration_seconds=0,
-            skipped=True, error="章节时长数据不完整",
-        )
-    raw_hours = total_seconds / 3600.0
+
+    # 如果有显式总时长就用它，否则用估算总时长
+    if total_seconds is not None:
+        raw_hours = total_seconds / 3600.0
+    else:
+        estimated = sum(estimate_chapter_duration_seconds(ch) for ch in chapters_data)
+        raw_hours = estimated / 3600.0
+        log.info("书籍 %s 的章节时长数据不完整，使用估算时长: %.1f 小时",
+                  book_name, raw_hours)
+
     split_trigger_hours = float(get_config("LONG_AUDIO_SPLIT_TRIGGER_HOURS", 12.0))
 
     safe_name = sanitize_filename(book_name)[:120]
@@ -1170,14 +1172,14 @@ def run_pipeline(runtime_config=None):
     total_matching = 0
     try:
         table_sql = get_public_table_identifier("books")
-        count_sql = psycopg_sql.SQL("SELECT COUNT(*) FROM {}").format(table_sql)
+        count_sql = psycopg_sql.SQL("SELECT COUNT(*) AS cnt FROM {}").format(table_sql)
         count_params = []
         target_category = str(get_config("TARGET_CATEGORY", "") or "").strip()
         if target_category:
             count_sql += psycopg_sql.SQL(" WHERE category = %s")
             count_params.append(target_category)
-        total_matching = execute_postgres_fetchone(count_sql, tuple(count_params))
-        total_matching = int(total_matching[0]) if total_matching else 0
+        count_row = execute_postgres_fetchone(count_sql, tuple(count_params))
+        total_matching = int(count_row["cnt"]) if count_row else 0
     except Exception:
         total_matching = 0
 
@@ -1207,6 +1209,8 @@ def run_pipeline(runtime_config=None):
         if not books_page:
             log.info("没有更多待处理的书籍。")
             break
+
+        random.shuffle(books_page)
 
         should_stop, remaining = should_stop_before_next_book(run_started_at)
         if should_stop:

@@ -2,6 +2,24 @@
 
 当 colab_loader.ipynb 使用 `from pipeline.config import RuntimeConfig`
 或 `from pipeline import *` 时，本 __init__.py 确保所有功能可用。
+
+## 导入顺序（防止循环引用）
+
+子模块按依赖层级从低到高排列：
+  1. config      — 基础配置，无 pipeline 内部依赖
+  2. log_utils   — 日志工具，无 pipeline 内部依赖
+  3. db          — 数据库，依赖 config, log_utils
+  4. utils       — 工具函数，无 pipeline 内部依赖
+  5. modelscope  — AI 生成，依赖 config, log_utils, db, utils
+  6. youtube     — YouTube API，依赖 config, log_utils, db, utils
+  7. state       — 状态管理，依赖 config, log_utils, db, utils
+  8. audio       — 音频处理，依赖 config, log_utils, utils
+  9. music_library — 音乐库，依赖 config, log_utils, db, utils
+  10. podcast    — Podcast 管理，依赖 config, log_utils, db, utils, youtube
+  11. core       — 主流程，依赖以上所有子模块
+
+⚠️ 任何新增子模块不可反向依赖 core.py，否则产生循环引用。
+`apply_runtime_config()` 在最后调用，此时所有子模块已加载完毕。
 """
 from __future__ import annotations
 
@@ -243,6 +261,8 @@ from pipeline.podcast import (
     _podcast_get_show_state_container,
     _podcast_apply_show_state_to_result,
     _podcast_sync_split_playlist_podcast,
+    # 公开接口
+    sync_split_playlist_podcast,
 )
 from pipeline.core import (
     validate_runtime_config,

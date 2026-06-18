@@ -55,6 +55,7 @@ from pipeline.audio import (
     MIN_BOOK_DURATION_SECONDS,
 )
 from pipeline.music_library import sync_music_library_if_enabled
+from pipeline.podcast import sync_split_playlist_podcast
 from psycopg import sql as psycopg_sql
 
 
@@ -1046,6 +1047,19 @@ def process_split_book(book_record, book_data, chapters_data, book_dir, safe_nam
         result.state_path = state_ref
 
     sync_result_from_split_state(result, state, split_plan)
+
+    # Podcast 后置同步：分片全部上传完成后同步到播放列表
+    podcast_runtime_enabled = get_config("ENABLE_YOUTUBE_PODCAST_RUNTIME", False)
+    podcast_split_enabled = get_config("ENABLE_YOUTUBE_PODCAST_SPLIT_PLAYLIST", False)
+    all_parts_completed = result.completed_part_count >= result.part_count
+    if podcast_runtime_enabled and podcast_split_enabled and all_parts_completed:
+        try:
+            podcast_result = sync_split_playlist_podcast(result, state, book_record, book_name)
+            if podcast_result:
+                log.info("[%s] Podcast 播放列表同步完成: %s", book_name, podcast_result.get("playlist_id", ""))
+        except Exception as e:
+            log.warning("[%s] Podcast 同步失败（不影响主流程）: %s", book_name, e)
+
     result = finalize_book_result(result, book_dir, book_record)
     return result
 
@@ -1139,6 +1153,7 @@ def run_pipeline(runtime_config=None):
     all_results = []
     processed_count = 0
     offset = 0
+    _stop_pipeline = False  # 全局停止标志
 
     resume_book_id = str(get_config("RESUME_BOOK_ID", "") or "").strip()
     resume_mode = bool(resume_book_id)
@@ -1193,8 +1208,16 @@ def run_pipeline(runtime_config=None):
                 result = process_book(book_record, output_root, youtube)
                 all_results.append(result)
                 processed_count += 1
+
+                # 发生错误时立即停止整个流程
+                if not result.success and not getattr(result, "skipped", False):
+                    error_msg = result.error or "未知错误"
+                    log.error("[%d/%d] 书籍 %s 处理失败，终止整个流程: %s",
+                              processed_count, len(all_results), book_name, error_msg)
+                    _stop_pipeline = True
+                    break
             except Exception as e:
-                log.error("[%d/%s] 处理书籍 %s 时发生未捕获异常: %s",
+                log.error("[%d/%s] 处理书籍 %s 时发生未捕获异常，终止整个流程: %s",
                           processed_count + 1, "?" if max_books == 0 else str(max_books), book_name, e)
                 log.error("堆栈: %s", traceback.format_exc())
                 error_result = BookResult(
@@ -1204,11 +1227,15 @@ def run_pipeline(runtime_config=None):
                     error=str(e),
                 )
                 all_results.append(error_result)
-                processed_count += 1
+                _stop_pipeline = True
+                break  # 异常时立即停止
 
             if resume_mode:
                 log.info("续跑模式完成，退出。")
                 break
+
+        if _stop_pipeline:
+            break
 
         offset += page_size
 

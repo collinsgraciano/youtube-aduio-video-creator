@@ -1682,3 +1682,10 @@ _PODCAST_RUNTIME_ORIGINAL_SYNC_SPLIT_PLAYLIST = sync_split_playlist
 _PODCAST_RUNTIME_ORIGINAL_SYNC_RESULT_FROM_SPLIT_STATE = sync_result_from_split_state
 
 
+# ============================================================================
+# 公开接口
+# ============================================================================
+# 以下函数供 pipeline 外部模块（如 core.py）调用
+sync_split_playlist_podcast = _podcast_sync_split_playlist_podcast
+
+

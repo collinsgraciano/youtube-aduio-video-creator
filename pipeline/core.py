@@ -48,7 +48,7 @@ from pipeline.state import (
     list_interrupted_book_states,
 )
 from pipeline.audio import (
-    download_chapter_items, build_split_part_plans, build_final_audio_from_chapter_paths,
+    download_chapter_items, build_split_part_plans,
     get_explicit_total_book_duration_seconds, get_explicit_chapter_duration_seconds,
     estimate_chapter_duration_seconds, parse_duration_to_seconds,
     denoise_audio_paths_parallel, generate_video, merge_audio_ffmpeg,
@@ -840,10 +840,17 @@ def process_standard_book(book_record, book_data, chapters_data, book_dir, safe_
     skip_existing = get_config("SKIP_EXISTING", True)
     use_poetry_audio = bool(get_config("POETRY_CHAPTER_SEGMENT_SECONDS", 0) > 0)
 
-    final_path = build_final_audio_from_chapter_paths(book_dir, safe_name, chapters_data)
-    if final_path and os.path.isfile(final_path):
-        result.merged_audio_path = final_path
-        log.info("[%s] 复用现成音频: %s", book_name, os.path.basename(final_path))
+    # 检查是否已有最终成品音频（mixed 或 merged）
+    audio_type = get_config("INTERMEDIATE_AUDIO_TYPE", "wav")
+    mixed_path = os.path.join(book_dir, f"{safe_name}_mixed.mp3")
+    merged_path = os.path.join(book_dir, f"{safe_name}.{audio_type}")
+    if os.path.isfile(mixed_path) and os.path.getsize(mixed_path) > 0:
+        result.merged_audio_path = mixed_path
+        result.mixed_audio_path = mixed_path
+        log.info("[%s] 复用现成混音音频: %s", book_name, os.path.basename(mixed_path))
+    elif os.path.isfile(merged_path) and os.path.getsize(merged_path) > 0:
+        result.merged_audio_path = merged_path
+        log.info("[%s] 复用现成合并音频: %s", book_name, os.path.basename(merged_path))
     else:
         if not chapters_data:
             log.warning("[%s] chapters_data 为空，跳过章节下载，仅复用已有音频。", book_name)

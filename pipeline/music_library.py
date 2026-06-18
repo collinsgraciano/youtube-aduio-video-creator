@@ -326,6 +326,16 @@ def sync_music_library_if_enabled():
 
     download_from_buckets = get_config("DOWNLOAD_FROM_BUCKETS", True)
     hf_music_download_method = get_config("HF_MUSIC_DOWNLOAD_METHOD", "datasets_zip_urls")
+    local_music_dir = get_config("LOCAL_MUSIC_DIR", "/content/music")
+
+    # 如果音乐目录中已有音频文件，跳过下载
+    if os.path.isdir(local_music_dir):
+        existing = [f for f in os.listdir(local_music_dir)
+                    if f.lower().endswith(('.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma'))]
+        if existing:
+            runtime_console_print(f"⏭️ 音乐库已存在 {len(existing)} 个音频文件，跳过下载。",
+                                  level="INFO")
+            return True
 
     # 应用云端配置覆盖
     overrides = apply_music_download_runtime_overrides()

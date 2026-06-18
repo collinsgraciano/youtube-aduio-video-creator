@@ -1179,6 +1179,10 @@ def run_pipeline(runtime_config=None):
             log.warning("YouTube 凭证未配置: %s。跳过所有 YouTube 相关操作。", e)
             enable_youtube_upload = False
 
+    # 在主循环前预先下载音乐库（如果启用 BGM）
+    if get_config("ENABLE_BGM_MIX", True):
+        sync_music_library_if_enabled()
+
     while True:
         if max_books > 0 and processed_count >= max_books:
             log.info("已达单次处理上限 %d 本，停止获取更多书籍。", max_books)
